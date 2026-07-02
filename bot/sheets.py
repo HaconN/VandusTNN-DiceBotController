@@ -8,6 +8,8 @@ expensive and doesn't need to happen on every single lookup.
 
 from __future__ import annotations
 
+from itertools import zip_longest
+
 from google.oauth2.service_account import Credentials
 import gspread
 
@@ -55,13 +57,14 @@ class SheetsClient:
 
     # ---- Final Sum -------------------------------------------------
 
-    def find_character_by_discord_id(self, discord_id: str) -> Character | None:
+    def find_character_by_discord_username(self, discord_username: str) -> Character | None:
         records = self._worksheet_records(FINAL_SUM_SHEET)
+        target = str(discord_username).strip().casefold()
         for row in records:
-            if str(row.get("Discord ID", "")).strip() == str(discord_id).strip():
+            if str(row.get("Discord ID", "")).strip().casefold() == target:
                 attributes = {attr: int(row.get(attr, 0) or 0) for attr in ATTRIBUTE_NAMES}
                 return Character(
-                    discord_id=str(row.get("Discord ID", "")).strip(),
+                    discord_username=str(row.get("Discord ID", "")).strip(),
                     char_id=str(row.get("ID", "")).strip(),
                     name=str(row.get("Name", "")).strip(),
                     race=str(row.get("Race", "")).strip(),
@@ -110,7 +113,10 @@ class SheetsClient:
                 continue
 
             # Multi-mode weapon: pair skills with attributes positionally.
-            for skill, attribute in zip(skills, attrs):
+            # A shorter attrs list (e.g. one shared attribute for both modes)
+            # repeats its last value instead of truncating the pairing.
+            fill = attrs[-1] if attrs else ""
+            for skill, attribute in zip_longest(skills, attrs, fillvalue=fill):
                 if "thrown" in skill.lower():
                     display_name = f"{name} (ขว้าง)"
                 else:

@@ -7,7 +7,7 @@ ATTRIBUTE_NAMES = ("STR", "CON", "DEX", "INT", "WIS")
 
 @dataclass(frozen=True)
 class Character:
-    discord_id: str
+    discord_username: str
     char_id: str  # e.g. "S1001", the join key into "Player Skill"
     name: str
     race: str

@@ -84,14 +84,18 @@ From the project root, with the venv active and `pyinstaller` installed
 pyinstaller build/controller.spec
 ```
 
-This is equivalent to (and pinned by the spec file, so prefer the command above):
+No `--distpath` flag is needed — the spec sets the output location itself: it
+lands in a sibling folder next to the project root, named
+`DiceBotController-Release`. For example, if this project lives at
+`C:\Work\Commu\Vandus\DiscordBot`, the exe is written to
+`C:\Work\Commu\Vandus\DiceBotController-Release\DiceBotController.exe` — kept
+outside the project directory so it's easy to hand off without dragging
+project files along. The intermediate build cache still lands in
+`build/controller/` inside the project, same as PyInstaller's default.
 
-```bash
-pyinstaller --onefile --windowed --name DiceBotController controller_app.py
-```
-
-The output executable is `dist/DiceBotController.exe`. Copy it anywhere on the target
-Windows PC — no Python installation required there. On first run it will create
+The output executable is `DiceBotController.exe` in that `DiceBotController-Release`
+folder. Copy it anywhere on the target Windows PC — no Python installation required
+there. On first run it will create
 `gui_config.json` next to itself to remember the token/paths/settings entered in the GUI.
 
 ## Running tests

@@ -49,20 +49,25 @@ class ControllerApp:
 
         ttk.Label(frame, text="Discord Bot Token:").grid(row=0, column=0, sticky="w", **pad)
         self.token_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self.token_var, show="*", width=48).grid(
-            row=0, column=1, columnspan=2, sticky="we", **pad
-        )
+        token_entry = ttk.Entry(frame, textvariable=self.token_var, show="*", width=40)
+        token_entry.grid(row=0, column=1, sticky="we", **pad)
+        self._add_paste_button(frame, token_entry, row=0, column=2)
+        self._enable_paste(token_entry)
 
         ttk.Label(frame, text="Service Account JSON:").grid(row=1, column=0, sticky="w", **pad)
         self.json_path_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self.json_path_var, width=38).grid(row=1, column=1, sticky="we", **pad)
-        ttk.Button(frame, text="เลือกไฟล์...", command=self._pick_json_file).grid(row=1, column=2, **pad)
+        json_entry = ttk.Entry(frame, textvariable=self.json_path_var, width=30)
+        json_entry.grid(row=1, column=1, sticky="we", **pad)
+        self._add_paste_button(frame, json_entry, row=1, column=2)
+        self._enable_paste(json_entry)
+        ttk.Button(frame, text="เลือกไฟล์...", command=self._pick_json_file).grid(row=1, column=3, **pad)
 
         ttk.Label(frame, text="Google Sheet Name/Key:").grid(row=2, column=0, sticky="w", **pad)
         self.sheet_name_var = tk.StringVar()
-        ttk.Entry(frame, textvariable=self.sheet_name_var, width=48).grid(
-            row=2, column=1, columnspan=2, sticky="we", **pad
-        )
+        sheet_entry = ttk.Entry(frame, textvariable=self.sheet_name_var, width=40)
+        sheet_entry.grid(row=2, column=1, sticky="we", **pad)
+        self._add_paste_button(frame, sheet_entry, row=2, column=2)
+        self._enable_paste(sheet_entry)
 
         ttk.Label(frame, text="ปิดอัตโนมัติ:").grid(row=3, column=0, sticky="w", **pad)
         self.shutdown_mode_label_var = tk.StringVar(value=SHUTDOWN_MODE_LABELS["none"])
@@ -98,6 +103,38 @@ class ControllerApp:
         self.log_box.grid(row=6, column=0, columnspan=3, sticky="nsew", **pad)
 
         frame.columnconfigure(1, weight=1)
+
+    def _paste_into(self, entry: tk.Entry) -> None:
+        entry.delete(0, "end")
+        entry.focus_set()
+        entry.event_generate("<<Paste>>")
+
+    def _add_paste_button(self, parent: ttk.Frame, entry: tk.Entry, row: int, column: int) -> None:
+        ttk.Button(parent, text="Paste", width=6, command=lambda: self._paste_into(entry)).grid(
+            row=row, column=column, padx=8, pady=4
+        )
+
+    def _enable_paste(self, entry: tk.Entry) -> None:
+        # ttk.Entry normally handles Ctrl+V/right-click-paste via its default
+        # bindtags, but they're bound to *insert*, not *replace* — and there
+        # was never a context menu wired up at all. Bind both explicitly so
+        # Ctrl+V and right-click behave the same as the Paste button (clear
+        # then paste), and so right-click actually offers a Paste option.
+        def paste_and_break(event=None):
+            self._paste_into(entry)
+            return "break"
+
+        entry.bind("<Control-v>", paste_and_break)
+        entry.bind("<Control-V>", paste_and_break)
+
+        menu = tk.Menu(entry, tearoff=0)
+        menu.add_command(label="Paste", command=lambda: self._paste_into(entry))
+
+        def show_context_menu(event):
+            entry.focus_set()
+            menu.tk_popup(event.x_root, event.y_root)
+
+        entry.bind("<Button-3>", show_context_menu)
 
     def _update_shutdown_fields(self) -> None:
         mode = LABEL_TO_MODE.get(self.shutdown_mode_label_var.get(), "none")

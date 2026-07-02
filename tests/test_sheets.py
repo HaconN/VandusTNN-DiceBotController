@@ -7,12 +7,12 @@ def make_client_with_records(records_by_sheet: dict[str, list[dict]]) -> SheetsC
     return client
 
 
-def test_find_character_by_discord_id_found():
+def test_find_character_by_discord_username_found():
     client = make_client_with_records(
         {
             "Final Sum": [
                 {
-                    "Discord ID": "111222333",
+                    "Discord ID": "Haconn",
                     "ID": "S1001",
                     "Name": "Aria",
                     "Race": "Human",
@@ -26,7 +26,7 @@ def test_find_character_by_discord_id_found():
         }
     )
 
-    char = client.find_character_by_discord_id("111222333")
+    char = client.find_character_by_discord_username("Haconn")
 
     assert char is not None
     assert char.char_id == "S1001"
@@ -34,9 +34,34 @@ def test_find_character_by_discord_id_found():
     assert char.attribute_value("DEX") == 14
 
 
-def test_find_character_by_discord_id_not_found():
+def test_find_character_by_discord_username_not_found():
     client = make_client_with_records({"Final Sum": []})
-    assert client.find_character_by_discord_id("999") is None
+    assert client.find_character_by_discord_username("nobody") is None
+
+
+def test_find_character_by_discord_username_case_insensitive():
+    client = make_client_with_records(
+        {
+            "Final Sum": [
+                {
+                    "Discord ID": "Haconn",
+                    "ID": "S1001",
+                    "Name": "Aria",
+                    "Race": "Human",
+                    "STR": 12,
+                    "CON": 10,
+                    "DEX": 14,
+                    "INT": 8,
+                    "WIS": 9,
+                }
+            ]
+        }
+    )
+
+    char = client.find_character_by_discord_username("haconn")
+
+    assert char is not None
+    assert char.char_id == "S1001"
 
 
 def test_find_skill_value():
@@ -103,6 +128,33 @@ def test_fetch_weapons_multiline_split_thrown():
 
     thrown = next(w for w in weapons if w.skill == "Thrown Weapon Fighting")
     assert thrown.display_name == "Knife (ขว้าง)"
+    assert thrown.attribute == "STR"
+
+
+def test_fetch_weapons_multiline_skill_single_shared_attribute():
+    client = make_client_with_records(
+        {
+            "Weapon Info": [
+                {
+                    "Code": "W03",
+                    "Weapon Name": "War Hammer",
+                    "Skill": "Impact Weapon Fighting\nThrown Weapon Fighting",
+                    "Attribute": "STR",
+                },
+            ]
+        }
+    )
+
+    weapons = client.fetch_weapons()
+
+    assert len(weapons) == 2
+
+    melee = next(w for w in weapons if w.skill == "Impact Weapon Fighting")
+    assert melee.display_name == "War Hammer"
+    assert melee.attribute == "STR"
+
+    thrown = next(w for w in weapons if w.skill == "Thrown Weapon Fighting")
+    assert thrown.display_name == "War Hammer (ขว้าง)"
     assert thrown.attribute == "STR"
 
 

@@ -16,7 +16,7 @@ class StubSheetsClient:
         self.skill_values = skill_values or {}
         self.weapons = weapons or []
 
-    def find_character_by_discord_id(self, discord_id):
+    def find_character_by_discord_username(self, discord_username):
         return self.character
 
     def find_skill_value(self, char_id, skill_name):
@@ -26,9 +26,9 @@ class StubSheetsClient:
         return self.weapons
 
 
-def make_interaction(user_id=111, display_name="Aria"):
+def make_interaction(username="aria#0001", display_name="Aria"):
     interaction = SimpleNamespace()
-    interaction.user = SimpleNamespace(id=user_id, display_name=display_name)
+    interaction.user = SimpleNamespace(name=username, display_name=display_name)
     interaction.response = SimpleNamespace(send_message=AsyncMock())
     return interaction
 
@@ -61,7 +61,7 @@ def test_roll_with_attribute_looks_up_character(monkeypatch):
     monkeypatch.setattr(dice.random, "randint", lambda a, b: next(sequence))
 
     character = Character(
-        discord_id="111", char_id="S1001", name="Aria", race="Human",
+        discord_username="aria#0001", char_id="S1001", name="Aria", race="Human",
         attributes={"STR": 2, "CON": 1, "DEX": 1, "INT": 1, "WIS": 1},
     )
     cog = DiceCog(bot=None, sheets_client=StubSheetsClient(character=character))
@@ -90,7 +90,7 @@ def test_attack_success_formats_breakdown(monkeypatch):
     monkeypatch.setattr(dice.random, "randint", lambda a, b: next(sequence))
 
     character = Character(
-        discord_id="111", char_id="S1001", name="Aria", race="Human",
+        discord_username="aria#0001", char_id="S1001", name="Aria", race="Human",
         attributes={"STR": 4, "CON": 1, "DEX": 1, "INT": 1, "WIS": 1},
     )
     weapon = WeaponOption(
@@ -125,7 +125,7 @@ def test_attack_unknown_weapon_is_ephemeral_error():
 
 def test_attack_zero_dice_is_ephemeral_error(monkeypatch):
     character = Character(
-        discord_id="111", char_id="S1001", name="Aria", race="Human",
+        discord_username="aria#0001", char_id="S1001", name="Aria", race="Human",
         attributes={"STR": 0, "CON": 0, "DEX": 0, "INT": 0, "WIS": 0},
     )
     weapon = WeaponOption(

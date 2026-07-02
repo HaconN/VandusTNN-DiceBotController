@@ -1,17 +1,29 @@
 # PyInstaller spec for the desktop controller app.
 #
-# Build with:
+# Build with (from the project root):
 #   pyinstaller build/controller.spec
 #
-# (equivalent to running, from the project root:
-#   pyinstaller --onefile --windowed --name DiceBotController controller_app.py
-# — this spec just pins that same configuration so it's reproducible.)
-#
-# Output: dist/DiceBotController.exe
+# Output: a sibling folder next to the project root, e.g. if this project
+# lives at C:\Work\Commu\Vandus\DiscordBot, the exe lands at
+# C:\Work\Commu\Vandus\DiceBotController-Release\DiceBotController.exe
+# — set below via CONF['distpath'] so no --distpath flag is needed.
+# The intermediate build/work cache stays inside the project, in
+# build/controller/, same as PyInstaller's own default.
 
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.config import CONF
+
 block_cipher = None
+
+# SPECPATH is this file's directory (…/DiscordBot/build), injected by PyInstaller.
+PROJECT_ROOT = os.path.dirname(SPECPATH)
+RELEASE_DIR = os.path.join(os.path.dirname(PROJECT_ROOT), "DiceBotController-Release")
+
+CONF["workpath"] = os.path.join(PROJECT_ROOT, "build", "controller")
+CONF["distpath"] = RELEASE_DIR
+os.makedirs(CONF["workpath"], exist_ok=True)
+os.makedirs(CONF["distpath"], exist_ok=True)
 
 a = Analysis(
     ["../controller_app.py"],

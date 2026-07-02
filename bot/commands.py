@@ -47,7 +47,7 @@ class DiceCog(commands.Cog):
             if attribute is None:
                 num_dice = 6
             else:
-                character = self.sheets.find_character_by_discord_id(interaction.user.id)
+                character = self.sheets.find_character_by_discord_username(interaction.user.name)
                 if character is None:
                     raise CharacterNotFoundError()
                 num_dice = character.attribute_value(attribute.value)
@@ -78,7 +78,7 @@ class DiceCog(commands.Cog):
             if matched is None:
                 raise WeaponNotFoundError(weapon)
 
-            character = self.sheets.find_character_by_discord_id(interaction.user.id)
+            character = self.sheets.find_character_by_discord_username(interaction.user.name)
             if character is None:
                 raise CharacterNotFoundError()
 
