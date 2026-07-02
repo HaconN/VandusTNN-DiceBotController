@@ -1,0 +1,22 @@
+# Secrets
+.env
+*.json
+!*.example.json
+gui_config.json
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# PyInstaller (keep build/controller.spec, ignore its generated work/output dirs)
+build/controller/
+dist/
+*.spec.bak
+
+# OS
+.DS_Store
+Thumbs.db
