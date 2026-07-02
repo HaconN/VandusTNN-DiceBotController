@@ -96,12 +96,11 @@ class DiceCog(commands.Cog):
             breakdown = (
                 f"{matched.skill} {skill_value} + {matched.attribute} {attribute_value} = {num_dice}d6"
             )
-            display_name = interaction.user.display_name
 
             message = (
-                f"{display_name} use {matched.display_name}\n"
-                f"{roll_line}\n"
+                f"{character.name} use {matched.display_name}\n"
                 f"{breakdown}\n"
+                f"{roll_line}\n"
                 f"SP: {sp}"
             )
             await interaction.response.send_message(message)

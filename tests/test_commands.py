@@ -90,7 +90,7 @@ def test_attack_success_formats_breakdown(monkeypatch):
     monkeypatch.setattr(dice.random, "randint", lambda a, b: next(sequence))
 
     character = Character(
-        discord_username="aria#0001", char_id="S1001", name="Aria", race="Human",
+        discord_username="aria#0001", char_id="S1001", name="Aria Silverleaf", race="Human",
         attributes={"STR": 4, "CON": 1, "DEX": 1, "INT": 1, "WIS": 1},
     )
     weapon = WeaponOption(
@@ -98,15 +98,17 @@ def test_attack_success_formats_breakdown(monkeypatch):
     )
     sheets = StubSheetsClient(character=character, skill_values={"Knife Fighting": 2}, weapons=[weapon])
     cog = DiceCog(bot=None, sheets_client=sheets)
-    interaction = make_interaction(display_name="Aria")
+    # Discord display name intentionally differs from the sheet's character name,
+    # to prove the reply uses character.name and not interaction.user.display_name.
+    interaction = make_interaction(display_name="SomeDiscordNick")
 
     run(cog.attack.callback(cog, interaction, "Knife", choice("normal")))
 
     (message,), kwargs = interaction.response.send_message.call_args
     assert message == (
-        "Aria use Knife\n"
-        "rolled [Normal] 6d6: 3, 4, 4, 1, 6, 5\n"
+        "Aria Silverleaf use Knife\n"
         "Knife Fighting 2 + STR 4 = 6d6\n"
+        "rolled [Normal] 6d6: 3, 4, 4, 1, 6, 5\n"
         "SP: 4"
     )
     assert kwargs.get("ephemeral") in (None, False)

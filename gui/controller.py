@@ -223,10 +223,52 @@ class ControllerApp:
         threading.Thread(target=self.runner.stop, daemon=True).start()
 
     def _on_close(self) -> None:
-        if self.runner.is_running:
+        if self.status_var.get() == "Online":
+            should_stop = self._ask_yes_no_thai(
+                "ยืนยันการปิดโปรแกรม",
+                "กำลังรันบอทอยู่ ต้องหยุดการทำงานก่อน จะหยุดการทำงานแล้วปิดโปรแกรมไหม?",
+            )
+            if not should_stop:
+                return
             self._on_log("กำลังปิดบอทก่อนออกจากโปรแกรม...")
             self.runner.stop()
         self.root.destroy()
+
+    def _ask_yes_no_thai(self, title: str, message: str) -> bool:
+        # messagebox.askyesno's button captions follow the OS/Tk locale (usually
+        # English "Yes"/"No") and can't be overridden, so this is a small modal
+        # Toplevel standing in for it with the exact Thai button labels required.
+        result = {"value": False}
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+
+        ttk.Label(dialog, text=message, wraplength=320, justify="left").pack(padx=16, pady=16)
+
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=(0, 12))
+
+        def on_yes() -> None:
+            result["value"] = True
+            dialog.destroy()
+
+        def on_no() -> None:
+            result["value"] = False
+            dialog.destroy()
+
+        ttk.Button(btn_frame, text="ใช่", width=10, command=on_yes).pack(side="left", padx=6)
+        ttk.Button(btn_frame, text="ไม่", width=10, command=on_no).pack(side="left", padx=6)
+        dialog.protocol("WM_DELETE_WINDOW", on_no)
+
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        dialog.grab_set()
+        self.root.wait_window(dialog)
+        return result["value"]
 
     # ---- callbacks (may run on background threads) ----------------------
 
