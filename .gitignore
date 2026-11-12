@@ -27,6 +27,9 @@ dist/
 .idea/
 .vscode/
 
+# Local reference notes, kept out of the repository
+README.md
+
 # OS
 .DS_Store
 Thumbs.db
