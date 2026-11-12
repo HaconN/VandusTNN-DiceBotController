@@ -17,14 +17,17 @@ bot/                Bot core: dice math, sheets access, slash commands
   weapon_cache.py       60 s in-memory weapon list for autocomplete
   main.py                Bot entrypoint (build_bot / standalone `python -m bot.main`)
 gui/                tkinter desktop controller
-  config_store.py       Local JSON persistence for token/paths/settings
-  bot_runner.py           Background thread + asyncio loop + auto-shutdown timer
-  controller.py            The tkinter window itself
+  config_store.py       Settings file in %LOCALAPPDATA% (+ migration from older builds)
+  bot_runner.py           Background thread + asyncio loop + auto-shutdown timer, log forwarding
+  controller.py            The tkinter window itself, including the Log box
 controller_app.py    Entry point used for the PyInstaller build
-tests/              pytest unit tests (dice math, sheet parsing, command logic)
+tests/              pytest tests (dice, sheets, commands, error reporting, Log box)
 build/controller.spec  PyInstaller spec for the .exe build
 .env.example        Template for standalone (non-GUI) bot runs
 ```
+
+Requires Python 3.10 or newer (developed and tested on 3.14) for running from source;
+the built .exe needs no Python.
 
 ## 1. Get a Discord bot token
 
@@ -44,7 +47,18 @@ build/controller.spec  PyInstaller spec for the .exe build
 1. Create a Google Cloud project, enable the **Google Sheets API** and **Google Drive API**.
 2. Create a **Service Account**, then create a JSON key for it and download it.
 3. Share your character-database Google Sheet with the service account's email address (found inside the JSON, `client_email`), giving it at least **Viewer** access.
-4. The sheet must have three tabs named exactly `Final Sum`, `Player Skill`, `Weapon Info` with the columns described in the bot's design notes.
+4. The sheet must have three tabs named exactly `Final Sum`, `Player Skill`, `Weapon Info`.
+   The first row of each tab is its header row:
+   - `Final Sum`: `Discord ID` (the player's Discord username), `ID`, `Name`, optionally
+     `Race`, and one column per stat: `STR`, `CON`, `DEX`, `INT`, `WIS`.
+   - `Player Skill`: `ID` (matching `Final Sum`) and one column per skill (a `Name`
+     column is fine; the bot doesn't read it).
+   - `Weapon Info`: `Code`, `Weapon Name`, `Skill`, `Attribute`. A weapon with two modes
+     (e.g. melee and thrown) puts one skill per line in `Skill` and the matching
+     attributes, one per line, in `Attribute`; a skill containing "Thrown" is listed
+     as "<name> (ขว้าง)".
+
+   A missing tab or column is reported as E303 / E304 (see the error codes below).
 
 ### Where to drop the service account JSON
 
@@ -68,15 +82,42 @@ python -m bot.main
 
 ## Running the GUI controller from source
 
+From the project root, with the venv active:
+
 ```bash
-python gui\controller.py
+python -m gui.controller
 ```
 
-Fill in the token, JSON path, and sheet name once — they're saved to `gui_config.json`
-in your per-user app data directory (also gitignored) so you only enter them once, and
-they survive rebuilding or replacing the .exe. Pick an auto-shutdown mode if you want
-the bot to stop itself after a session, then click **Start**. The status indicator
-reflects the real Discord connection state, not just the button click.
+The `-m` matters: `python gui\controller.py` fails with
+`ModuleNotFoundError: No module named 'gui'`, because running a file directly puts
+`gui\` rather than the project root on Python's import path. `python controller_app.py`
+(the same entry point the .exe uses) also works from the project root.
+
+Fill in the token, JSON path, and sheet name once (see "Where the settings are stored"
+below). Pick an auto-shutdown mode if you want the bot to stop itself after a session,
+then click **Start**. The status indicator reflects the real Discord connection state,
+not just the button click. On connect the Log box also reports whether the Google
+Sheet could be read, with the service account's email address.
+
+## Where the settings are stored
+
+The controller saves the token, the JSON path, the sheet name and the auto-shutdown
+choice to:
+
+- `%LOCALAPPDATA%\DiceBotController\gui_config.json` on Windows
+- `~/.dicebotcontroller/gui_config.json` where `LOCALAPPDATA` isn't set
+
+The folder name is fixed in `gui/config_store.py`; it does not depend on the .exe's
+name or location, so renaming, moving, rebuilding or replacing the .exe keeps the
+settings. (Changing that folder name in the code would make every user start from an
+empty config.)
+
+Older builds kept `gui_config.json` next to the .exe (or in the project root when run
+from source). If no config exists at the new location yet, the first start copies
+that old file over automatically; the old file is left where it was.
+
+The token is stored in plain text, readable by anyone who can open your Windows user
+profile.
 
 ## Building the standalone .exe with PyInstaller
 
@@ -86,6 +127,9 @@ From the project root, with the venv active and `pyinstaller` installed
 ```bash
 pyinstaller build/controller.spec
 ```
+
+For a clean rebuild (drops PyInstaller's cache and overwrites the old .exe without
+asking), use `pyinstaller --clean --noconfirm build/controller.spec`.
 
 No `--distpath` flag is needed — the spec sets the output location itself: it
 lands in a sibling folder next to the project root, named
@@ -97,13 +141,9 @@ project files along. The intermediate build cache still lands in
 `build/controller/` inside the project, same as PyInstaller's default.
 
 The output executable is `DiceBotController.exe` in that `DiceBotController-Release`
-folder. Copy it anywhere on the target Windows PC — no Python installation required
-there. On first run it will create `gui_config.json` in `%LOCALAPPDATA%\DiceBotController\`
-(or `~/.dicebotcontroller/` if `LOCALAPPDATA` isn't set) to remember the token/paths/settings
-entered in the GUI. Because this lives outside the `DiceBotController-Release` folder,
-rebuilding or replacing the .exe never wipes it — and if an older config is found next to
-the .exe from a previous version, it's migrated to the new location automatically on first
-run.
+folder (the name comes from `name=` in the spec). Copy it anywhere on the target Windows
+PC — no Python installation required there. Its settings live in `%LOCALAPPDATA%`, not
+next to the .exe (see "Where the settings are stored").
 
 ## Running tests
 
@@ -112,18 +152,58 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+The Log box tests need Tk; without a display they are skipped.
+
 ## Dice system reference
 
-Every roll is Nd6; success points (SP) count dice landing in the pass range:
+### Commands
 
-| Roll type | Pass values |
-|---|---|
-| Normal | 4, 5, 6 |
-| ADV    | 3, 4, 5, 6 |
-| DIS    | 5, 6 |
+- `/roll type:<Normal|ADV|DIS>` with at most one of:
+  - nothing: rolls 6d6, no character needed;
+  - `attribute:<STR|CON|DEX|INT|WIS>`: rolls as many d6 as the character's stat in
+    `Final Sum`;
+  - `dice:<NdM>`: rolls N dice with M faces, e.g. `3d6`, `2d8`, `4d20`. N is 1-100,
+    M is one of 4, 6, 8, 10, 12, 20. Case and spaces don't matter (`3D6`, `3 d 6`).
 
-Output format:
+  Giving both `attribute` and `dice` is an error (E101).
+- `/attack weapon:<name> type:<Normal|ADV|DIS>` rolls (weapon skill from `Player Skill`)
+  + (weapon attribute from `Final Sum`) d6. A blank skill cell counts as 0. A pool
+  above 100 dice is refused (E206).
+
+### Pass values
+
+Success points (SP) count the dice that land in the pass range, from `min_pass` up to
+the highest face:
+
 ```
+min_pass = faces - round(faces * ratio) + 1
+ratio:  Normal 1/2   ADV 2/3   DIS 1/3
+```
+
+This reproduces the original d6 ranges and gives:
+
+| Die | Normal | ADV | DIS |
+|---|---|---|---|
+| d4  | 3-4 (50%)   | 2-4 (75%)  | 4 (25%)     |
+| d6  | 4-6 (50%)   | 3-6 (67%)  | 5-6 (33%)   |
+| d8  | 5-8 (50%)   | 4-8 (62%)  | 6-8 (38%)   |
+| d10 | 6-10 (50%)  | 4-10 (70%) | 8-10 (30%)  |
+| d12 | 7-12 (50%)  | 5-12 (67%) | 9-12 (33%)  |
+| d20 | 11-20 (50%) | 8-20 (65%) | 14-20 (35%) |
+
+Normal is exactly 50% on every die; ADV and DIS land near 2/3 and 1/3 but not exactly,
+because the threshold is rounded to a whole face.
+
+### Output format
+
+```
+rolled [ADV] 2d8: 5, 3
+SP: 1
+```
+
+```
+Aria Silverleaf use Knife
+Knife Fighting 2 + STR 4 = 6d6
 rolled [Normal] 6d6: 3, 4, 4, 1, 6, 5
 SP: 4
 ```
@@ -174,7 +254,12 @@ shows only the file path and `client_email`.
 
 - No credentials are committed anywhere in this repo. `.env.example` and the PyInstaller
   spec contain placeholders only.
-- `.gitignore` excludes the real `.env`, all `*.json` service account key files, and
-  `gui_config.json` (the GUI's local credential store).
-- The GUI never prints the raw token or JSON key contents to its log box or stdout —
-  only connection status lines (e.g. "เชื่อมต่อ Discord สำเร็จ").
+- `.gitignore` excludes `.env` and `.env.*` (except `.env.example`), all `*.json` files
+  (service account keys), `gui_config.json`, key files (`*.pem`, `*.key`, `*.p12`,
+  `*.pfx`) and IDE folders (`.idea/`, `.vscode/`).
+- The Log box shows technical error detail, but every entry and every Discord reply goes
+  through a redaction step first: the bot token, private keys and Google OAuth tokens
+  are replaced with `[REDACTED]`. For the key file only its path and `client_email` are
+  ever shown.
+- `tests/` contains deliberately fake values shaped like a private key and a Discord
+  token, used to test that redaction. They are not credentials.
