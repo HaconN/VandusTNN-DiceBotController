@@ -143,6 +143,77 @@ def test_attack_zero_dice_is_ephemeral_error(monkeypatch):
     assert kwargs.get("ephemeral") is True
 
 
+def test_roll_with_dice_notation(monkeypatch):
+    sequence = iter([5, 3])
+    monkeypatch.setattr(dice.random, "randint", lambda a, b: next(sequence))
+
+    cog = DiceCog(bot=None, sheets_client=StubSheetsClient())
+    interaction = make_interaction()
+
+    run(cog.roll.callback(cog, interaction, choice("adv"), None, "2d8"))
+
+    (message,), kwargs = interaction.response.send_message.call_args
+    assert message == "rolled [ADV] 2d8: 5, 3\nSP: 1"
+    assert kwargs.get("ephemeral") in (None, False)
+
+
+def test_roll_with_dice_notation_is_case_insensitive_and_trims_whitespace(monkeypatch):
+    sequence = iter([3, 4, 4])
+    monkeypatch.setattr(dice.random, "randint", lambda a, b: next(sequence))
+
+    cog = DiceCog(bot=None, sheets_client=StubSheetsClient())
+    interaction = make_interaction()
+
+    run(cog.roll.callback(cog, interaction, choice("normal"), None, "  3D6  "))
+
+    (message,), kwargs = interaction.response.send_message.call_args
+    assert "3d6" in message
+    assert kwargs.get("ephemeral") in (None, False)
+
+
+def test_roll_with_dice_and_attribute_is_ephemeral_error():
+    cog = DiceCog(bot=None, sheets_client=StubSheetsClient())
+    interaction = make_interaction()
+
+    run(cog.roll.callback(cog, interaction, choice("normal"), choice("STR"), "3d6"))
+
+    (message,), kwargs = interaction.response.send_message.call_args
+    assert kwargs.get("ephemeral") is True
+
+
+@pytest.mark.parametrize("notation", ["3d7", "1d3", "5d100"])
+def test_roll_with_invalid_die_size_is_ephemeral_error(notation):
+    cog = DiceCog(bot=None, sheets_client=StubSheetsClient())
+    interaction = make_interaction()
+
+    run(cog.roll.callback(cog, interaction, choice("normal"), None, notation))
+
+    (message,), kwargs = interaction.response.send_message.call_args
+    assert kwargs.get("ephemeral") is True
+
+
+@pytest.mark.parametrize("notation", ["0d6", "101d6"])
+def test_roll_with_out_of_range_count_is_ephemeral_error(notation):
+    cog = DiceCog(bot=None, sheets_client=StubSheetsClient())
+    interaction = make_interaction()
+
+    run(cog.roll.callback(cog, interaction, choice("normal"), None, notation))
+
+    (message,), kwargs = interaction.response.send_message.call_args
+    assert kwargs.get("ephemeral") is True
+
+
+@pytest.mark.parametrize("notation", ["abc", "3x6", "d6", "3d"])
+def test_roll_with_malformed_notation_is_ephemeral_error(notation):
+    cog = DiceCog(bot=None, sheets_client=StubSheetsClient())
+    interaction = make_interaction()
+
+    run(cog.roll.callback(cog, interaction, choice("normal"), None, notation))
+
+    (message,), kwargs = interaction.response.send_message.call_args
+    assert kwargs.get("ephemeral") is True
+
+
 @pytest.mark.parametrize("current,expected_count", [("kni", 1), ("zzz", 0), ("", 2)])
 def test_weapon_autocomplete_filters_case_insensitive(current, expected_count):
     weapons = [

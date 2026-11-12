@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import re
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot import dice
+from bot import dice as dice_module
 from bot.errors import (
     BotUserError,
     CharacterNotFoundError,
+    DiceAndAttributeConflictError,
     InvalidDiceCountError,
+    InvalidDiceCountRangeError,
+    InvalidDiceNotationError,
+    InvalidDieSizeError,
     SkillNotFoundError,
     WeaponNotFoundError,
 )
@@ -25,6 +31,25 @@ ROLL_TYPE_CHOICES = [
 
 ATTRIBUTE_CHOICES = [app_commands.Choice(name=a, value=a) for a in ATTRIBUTE_NAMES]
 
+DICE_NOTATION_RE = re.compile(r"^(\d+)\s*d\s*(\d+)$", re.IGNORECASE)
+
+
+def parse_dice_notation(notation: str) -> tuple[int, int]:
+    """Parses NdM dice notation (e.g. "3d6") into (count, faces).
+
+    Raises InvalidDiceNotationError for malformed input, InvalidDiceCountRangeError
+    if count is outside 1-100, and InvalidDieSizeError if faces isn't a supported size.
+    """
+    match = DICE_NOTATION_RE.match(notation.strip())
+    if not match:
+        raise InvalidDiceNotationError(notation)
+    count, faces = int(match.group(1)), int(match.group(2))
+    if not (1 <= count <= 100):
+        raise InvalidDiceCountRangeError(count)
+    if faces not in dice_module.SUPPORTED_FACES:
+        raise InvalidDieSizeError(faces)
+    return count, faces
+
 
 class DiceCog(commands.Cog):
     def __init__(self, bot: commands.Bot, sheets_client: SheetsClient):
@@ -35,6 +60,7 @@ class DiceCog(commands.Cog):
     @app_commands.describe(
         type="ประเภทการทอย",
         attribute="สเตตัสที่ใช้ (ไม่ระบุ = ทอย 6d6 ธรรมดา ไม่ต้องมีตัวละคร)",
+        dice="สัญกรณ์ลูกเต๋า เช่น 3d6, 2d8, 4d20 (ใช้แทน attribute ไม่ได้พร้อมกัน)",
     )
     @app_commands.choices(type=ROLL_TYPE_CHOICES, attribute=ATTRIBUTE_CHOICES)
     async def roll(
@@ -42,21 +68,29 @@ class DiceCog(commands.Cog):
         interaction: discord.Interaction,
         type: app_commands.Choice[str],
         attribute: app_commands.Choice[str] | None = None,
+        dice: str | None = None,
     ):
         try:
-            if attribute is None:
-                num_dice = 6
-            else:
+            if dice is not None and attribute is not None:
+                raise DiceAndAttributeConflictError()
+
+            if dice is not None:
+                num_dice, faces = parse_dice_notation(dice)
+            elif attribute is not None:
                 character = self.sheets.find_character_by_discord_username(interaction.user.name)
                 if character is None:
                     raise CharacterNotFoundError()
                 num_dice = character.attribute_value(attribute.value)
+                faces = 6
+            else:
+                num_dice = 6
+                faces = 6
 
             if num_dice <= 0:
                 raise InvalidDiceCountError(num_dice)
 
-            rolls, sp = dice.roll_dice(num_dice, type.value)
-            roll_line = dice.format_roll_line(type.value, num_dice, rolls)
+            rolls, sp = dice_module.roll_dice(num_dice, type.value, faces)
+            roll_line = dice_module.format_roll_line(type.value, num_dice, rolls, faces)
             await interaction.response.send_message(f"{roll_line}\nSP: {sp}")
         except BotUserError as e:
             await interaction.response.send_message(str(e), ephemeral=True)
@@ -91,8 +125,8 @@ class DiceCog(commands.Cog):
             if num_dice <= 0:
                 raise InvalidDiceCountError(num_dice)
 
-            rolls, sp = dice.roll_dice(num_dice, type.value)
-            roll_line = dice.format_roll_line(type.value, num_dice, rolls)
+            rolls, sp = dice_module.roll_dice(num_dice, type.value)
+            roll_line = dice_module.format_roll_line(type.value, num_dice, rolls)
             breakdown = (
                 f"{matched.skill} {skill_value} + {matched.attribute} {attribute_value} = {num_dice}d6"
             )

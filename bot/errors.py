@@ -32,3 +32,31 @@ class SkillNotFoundError(BotUserError):
         super().__init__(
             f"ไม่พบค่าสกิล \"{skill_name}\" ของตัวละครคุณในระบบ กรุณาติดต่อ GM"
         )
+
+
+class DiceAndAttributeConflictError(BotUserError):
+    def __init__(self):
+        super().__init__(
+            "กรุณาระบุอย่างใดอย่างหนึ่งระหว่าง \"dice\" หรือ \"attribute\" ไม่สามารถใช้พร้อมกันทั้งสองอย่างได้"
+        )
+
+
+class InvalidDiceNotationError(BotUserError):
+    def __init__(self, notation: str):
+        super().__init__(
+            f"รูปแบบลูกเต๋า \"{notation}\" ไม่ถูกต้อง กรุณาใช้รูปแบบ NdM เช่น 3d6, 2d8, 4d20"
+        )
+
+
+class InvalidDieSizeError(BotUserError):
+    def __init__(self, faces: int):
+        super().__init__(
+            f"ขนาดลูกเต๋า d{faces} ไม่ถูกต้อง กรุณาใช้ขนาดที่รองรับเท่านั้น: d4, d6, d8, d10, d12, d20"
+        )
+
+
+class InvalidDiceCountRangeError(BotUserError):
+    def __init__(self, count: int):
+        super().__init__(
+            f"จำนวนลูกเต๋า {count} ไม่ถูกต้อง กรุณาระบุจำนวนระหว่าง 1 ถึง 100"
+        )

@@ -47,7 +47,7 @@ build/controller.spec  PyInstaller spec for the .exe build
 ### Where to drop the service account JSON
 
 - **Standalone / dev mode:** place the file anywhere and point `GOOGLE_SERVICE_ACCOUNT_JSON` in your `.env` at it (see `.env.example`).
-- **GUI controller:** use the "เลือกไฟล์..." (Choose file) button to browse to the JSON file. Its path is saved locally in `gui_config.json` next to the app — the file itself is never copied or embedded, only its path is remembered.
+- **GUI controller:** use the "เลือกไฟล์..." (Choose file) button to browse to the JSON file. Its path is saved locally in `gui_config.json` in your per-user app data directory (see below) — the file itself is never copied or embedded, only its path is remembered.
 
 Never commit the JSON key file. `.gitignore` already excludes `*.json` (other than files ending in `.example.json`).
 
@@ -71,9 +71,10 @@ python gui\controller.py
 ```
 
 Fill in the token, JSON path, and sheet name once — they're saved to `gui_config.json`
-next to the app (also gitignored) so you only enter them once. Pick an auto-shutdown
-mode if you want the bot to stop itself after a session, then click **Start**. The
-status indicator reflects the real Discord connection state, not just the button click.
+in your per-user app data directory (also gitignored) so you only enter them once, and
+they survive rebuilding or replacing the .exe. Pick an auto-shutdown mode if you want
+the bot to stop itself after a session, then click **Start**. The status indicator
+reflects the real Discord connection state, not just the button click.
 
 ## Building the standalone .exe with PyInstaller
 
@@ -95,8 +96,12 @@ project files along. The intermediate build cache still lands in
 
 The output executable is `DiceBotController.exe` in that `DiceBotController-Release`
 folder. Copy it anywhere on the target Windows PC — no Python installation required
-there. On first run it will create
-`gui_config.json` next to itself to remember the token/paths/settings entered in the GUI.
+there. On first run it will create `gui_config.json` in `%LOCALAPPDATA%\DiceBotController\`
+(or `~/.dicebotcontroller/` if `LOCALAPPDATA` isn't set) to remember the token/paths/settings
+entered in the GUI. Because this lives outside the `DiceBotController-Release` folder,
+rebuilding or replacing the .exe never wipes it — and if an older config is found next to
+the .exe from a previous version, it's migrated to the new location automatically on first
+run.
 
 ## Running tests
 
