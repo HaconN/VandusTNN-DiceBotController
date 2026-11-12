@@ -13,6 +13,12 @@ PASS_RATIOS = {
 # Die sizes the bot supports for the "dice" notation parameter.
 SUPPORTED_FACES = (4, 6, 8, 10, 12, 20)
 
+# Allowed number of dice in one roll, for typed notation ("3d6") and for
+# pools computed from the sheet alike. The upper bound also keeps the reply
+# far below Discord's 2000-character message limit.
+MIN_DICE = 1
+MAX_DICE = 100
+
 # Display labels used in the roll output line, e.g. "rolled [Normal] 6d6: ..."
 DISPLAY_LABELS = {
     "normal": "Normal",

@@ -8,11 +8,13 @@ desktop app to start/stop the bot without a terminal.
 
 ```
 bot/                Bot core: dice math, sheets access, slash commands
-  dice.py            Nd6 rolling + SP counting
-  models.py           Character / WeaponOption dataclasses
+  dice.py            NdM rolling (d4-d20) + SP counting
+  models.py           Character / WeaponOption dataclasses, strict cell parsing
   sheets.py            Google Sheets access layer (gspread), re-fetched every call
-  commands.py           /roll and /attack slash commands
-  errors.py             User-facing (Thai) error types
+  commands.py           /roll and /attack slash commands, error handling
+  errors.py             Coded error types (E101...) with Thai player messages
+  reporting.py          Player error replies, controller log entries, redaction
+  weapon_cache.py       60 s in-memory weapon list for autocomplete
   main.py                Bot entrypoint (build_bot / standalone `python -m bot.main`)
 gui/                tkinter desktop controller
   config_store.py       Local JSON persistence for token/paths/settings
@@ -125,6 +127,48 @@ Output format:
 rolled [Normal] 6d6: 3, 4, 4, 1, 6, 5
 SP: 4
 ```
+
+## Log box and error codes
+
+The controller's Log box shows one line per successful command, e.g.
+`[21:05:33] /attack haconn -> Play C, ดาบใหญ่, 5d6 ADV, SP 4`, and one entry per
+error. It keeps the newest 500 lines.
+
+Every error has a stable code. The player gets an ephemeral Thai message with the
+code (e.g. `❌ [E203] ...`); the Log box gets the same code with the technical
+detail: who ran which command, the character, weapon, skill and attribute, the raw
+cell value where one is involved, the exception and where it was raised. Unexpected
+errors (E900) get a full traceback in the log and a generic message for the player.
+
+| Code | Meaning | Usually fixed by |
+|---|---|---|
+| E101 | `dice` and `attribute` given together | player |
+| E102 | dice notation is not NdM | player |
+| E103 | unsupported die size (not d4/d6/d8/d10/d12/d20) | player |
+| E104 | dice count in the notation outside 1-100 | player |
+| E105 | weapon name not in the weapon list | player (pick from autocomplete) |
+| E201 | no row in `Final Sum` whose `Discord ID` is the player's username | GM |
+| E202 | character's ID has no row in `Player Skill` | GM |
+| E203 | stat cell is blank, text or a decimal (raw value in the log) | GM |
+| E204 | skill cell is text or a decimal (a blank skill cell counts as 0) | GM |
+| E205 | computed dice count is 0 or negative | GM |
+| E206 | computed dice count is above 100 | GM |
+| E301 | weapon's Skill is not a column in `Player Skill` | GM |
+| E302 | weapon's Attribute is not STR/CON/DEX/INT/WIS | GM |
+| E303 | a required tab is missing or renamed | GM |
+| E304 | a required column is missing from a tab's header row | GM |
+| E401 | service account JSON missing, corrupt or rejected by Google | GM (Controller) |
+| E403 | sheet not shared with the service account (`client_email` is in the log) | GM |
+| E404 | spreadsheet name/key/URL not found (or not shared, when opened by name) | GM (Controller) |
+| E408 | Google Sheets did not answer in time | retry |
+| E429 | Google Sheets read quota used up for the moment | wait ~1 min |
+| E450 | could not reach Google (network) | retry / check internet |
+| E499 | other Google Sheets API error | retry |
+| E900 | unexpected error in the bot (full traceback in the log) | developer |
+| E901 | the bot could not send its reply to Discord (log only) | developer |
+
+The log never shows the bot token or the service account key; for the key file it
+shows only the file path and `client_email`.
 
 ## Security notes
 

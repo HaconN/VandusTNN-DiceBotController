@@ -7,6 +7,7 @@ an optional auto-shutdown timer.
 
 from __future__ import annotations
 
+import queue
 import threading
 import tkinter as tk
 from datetime import datetime, time as dt_time
@@ -14,6 +15,17 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 from gui.bot_runner import BotRunner
 from gui.config_store import ConfigStore
+
+# The log box keeps only the newest lines, so a long session can't grow it
+# without bound.
+MAX_LOG_LINES = 500
+# How often the UI picks up log lines and status changes posted by the bot's
+# threads.
+UI_POLL_MS = 100
+LOG_LEVEL_COLORS = {"warning": "#b26a00", "error": "#c62828", "critical": "#c62828"}
+# Errors carry the full date, so an entry copied out of the box still says
+# when it happened; routine lines show the time only.
+FULL_DATE_LEVELS = ("error", "critical")
 
 SHUTDOWN_MODE_LABELS = {
     "none": "ไม่ปิดอัตโนมัติ (ปิดเองด้วยปุ่ม Stop)",
@@ -32,6 +44,9 @@ class ControllerApp:
         self.config_store = ConfigStore()
         self.config = self.config_store.load()
 
+        # Bot threads never touch tkinter: they post here, and the main
+        # thread drains the queue every UI_POLL_MS.
+        self._ui_queue: queue.SimpleQueue = queue.SimpleQueue()
         self.runner = BotRunner(log_callback=self._on_log, status_callback=self._on_status)
 
         self._build_widgets()
@@ -39,6 +54,7 @@ class ControllerApp:
         self._update_shutdown_fields()
 
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.root.after(UI_POLL_MS, self._poll_ui_queue)
 
     # ---- widget construction ------------------------------------------
 
@@ -101,6 +117,8 @@ class ControllerApp:
         ttk.Label(frame, text="Log:").grid(row=5, column=0, sticky="nw", **pad)
         self.log_box = scrolledtext.ScrolledText(frame, height=12, width=68, state="disabled", wrap="word")
         self.log_box.grid(row=6, column=0, columnspan=3, sticky="nsew", **pad)
+        for level, color in LOG_LEVEL_COLORS.items():
+            self.log_box.tag_configure(level, foreground=color)
 
         frame.columnconfigure(1, weight=1)
 
@@ -273,7 +291,30 @@ class ControllerApp:
     # ---- callbacks (may run on background threads) ----------------------
 
     def _on_status(self, is_online: bool) -> None:
-        self.root.after(0, lambda: self._set_status_ui(is_online))
+        self._ui_queue.put(("status", is_online))
+
+    def _on_log(self, message: str, level: str = "info") -> None:
+        self._ui_queue.put(("log", (message, level, datetime.now())))
+
+    # ---- main-thread side -------------------------------------------------
+
+    def _poll_ui_queue(self) -> None:
+        self._drain_ui_queue()
+        try:
+            self.root.after(UI_POLL_MS, self._poll_ui_queue)
+        except tk.TclError:
+            pass  # window already closed
+
+    def _drain_ui_queue(self) -> None:
+        while True:
+            try:
+                kind, payload = self._ui_queue.get_nowait()
+            except queue.Empty:
+                return
+            if kind == "status":
+                self._set_status_ui(payload)
+            else:
+                self._append_log(*payload)
 
     def _set_status_ui(self, is_online: bool) -> None:
         if is_online:
@@ -287,15 +328,23 @@ class ControllerApp:
             self.start_button.config(state="normal")
             self.stop_button.config(state="disabled")
 
-    def _on_log(self, message: str) -> None:
-        self.root.after(0, lambda: self._append_log(message))
-
-    def _append_log(self, message: str) -> None:
-        timestamp = datetime.now().strftime("%H:%M:%S")
+    def _append_log(self, message: str, level: str = "info", when: datetime | None = None) -> None:
+        when = when or datetime.now()
+        stamp_format = "%Y-%m-%d %H:%M:%S" if level in FULL_DATE_LEVELS else "%H:%M:%S"
+        tags = (level,) if level in LOG_LEVEL_COLORS else ()
         self.log_box.config(state="normal")
-        self.log_box.insert("end", f"[{timestamp}] {message}\n")
+        self.log_box.insert("end", f"[{when.strftime(stamp_format)}] {message}\n", tags)
+        self._trim_log()
         self.log_box.see("end")
         self.log_box.config(state="disabled")
+
+    def _trim_log(self) -> None:
+        # "end-1c" is just past the final newline, i.e. column 0 of the line
+        # after the last entry, so its line number minus one is the count.
+        line_count = int(self.log_box.index("end-1c").split(".")[0]) - 1
+        excess = line_count - MAX_LOG_LINES
+        if excess > 0:
+            self.log_box.delete("1.0", f"{excess + 1}.0")
 
 
 def main() -> None:
