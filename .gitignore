@@ -1,8 +1,14 @@
 # Secrets
 .env
+.env.*
+!.env.example
 *.json
 !*.example.json
 gui_config.json
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Python
 __pycache__/
@@ -16,6 +22,10 @@ venv/
 build/controller/
 dist/
 *.spec.bak
+
+# IDE
+.idea/
+.vscode/
 
 # OS
 .DS_Store
